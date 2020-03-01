@@ -6,29 +6,46 @@
 #include<map>
 #include<ctime>
 #include<iomanip>
-struct PEFile
+#define NTSIGNATURE(a) ((LPVOID)((BYTE *)a +    \
+                        ((PIMAGE_DOS_HEADER)a)->e_lfanew))
+struct PEFileDirect
 {
-	IMAGE_DOS_HEADER ImageDosHeader;
-	ULONG Signature;
-	IMAGE_FILE_HEADER ImageFileHeader;
-	WORD OptionalHeaderMagic;
-	union ImageOptionalHeader {
-		IMAGE_OPTIONAL_HEADER32 ImageOptionalHeader32;
-		IMAGE_OPTIONAL_HEADER64 ImageOptionalHeader64;
-	} ImageOptionalHeader;
-	bool HasImageOptionalHeader() {
-		return ImageFileHeader.SizeOfOptionalHeader > 0;
+	void* FileContent;
+	PIMAGE_DOS_HEADER GetImageDosHeader() {
+		return (PIMAGE_DOS_HEADER)FileContent;
+	}
+	ULONG GetSignature() {
+		return *(ULONG*)((BYTE*)FileContent + GetImageDosHeader()->e_lfanew);
+	}
+	PIMAGE_FILE_HEADER GetImageFileHeader() {
+		PIMAGE_DOS_HEADER DosHeader = GetImageDosHeader();
+		return (PIMAGE_FILE_HEADER)((BYTE*)FileContent + DosHeader->e_lfanew + sizeof(ULONG));
 	}
 	WORD GetSizeOfOptionalHeader() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		return ImageFileHeader.SizeOfOptionalHeader;
 	}
+	bool HasImageOptionalHeader() {
+		auto ImageFileHeader = *GetImageFileHeader();
+		return ImageFileHeader.SizeOfOptionalHeader > 0;
+	}
+	PIMAGE_OPTIONAL_HEADER32 GetImageOptionalHeader32() {
+		return (PIMAGE_OPTIONAL_HEADER32)((BYTE*)GetImageFileHeader() + sizeof(IMAGE_FILE_HEADER));
+	}
+	PIMAGE_OPTIONAL_HEADER64 GetImageOptionalHeader64() {
+		return (PIMAGE_OPTIONAL_HEADER64)((BYTE*)GetImageFileHeader() + sizeof(IMAGE_FILE_HEADER));
+	}
+	WORD GetOptionalHeaderMagic() {
+		return *(WORD*)((BYTE*)GetImageFileHeader() + sizeof(IMAGE_FILE_HEADER));
+	}
 	bool IsPE32() {
-		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+		return GetOptionalHeaderMagic() == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
 	}
 	bool IsPE32Plus() {
-		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+		return GetOptionalHeaderMagic() == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 	}
 	std::string GetImageDosHeaderAsString() {
+		auto ImageDosHeader = *GetImageDosHeader();
 		const char* Format = "Magic Number: [0x%hx, %c%c]\n"
 			"Bytes on last page of file: [%hu] Bytes\n"
 			"Pages in file: [%hu] pages\n"
@@ -57,12 +74,14 @@ struct PEFile
 		return std::string(Buffer);
 	}
 	std::string GetSignatureAsString() {
+		auto Signature = GetSignature();
 		const char* Format = "Signature: [0x%lx, %c%c]\n";
 		char Buffer[32];
-		sprintf(Buffer, Format, Signature, (char)Signature, (char)(Signature>>8));
+		sprintf(Buffer, Format, Signature, (char)Signature, (char)(Signature >> 8), (char)(Signature >> 16), (char)(Signature >> 24));
 		return std::string(Buffer);
 	}
 	const char* GetMachineTypeAsString() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		static std::map<WORD, const char*> TypeMap = {
 			{ IMAGE_FILE_MACHINE_UNKNOWN, "The contents of this field are assumed to be applicable to any machine type" },
 			{ IMAGE_FILE_MACHINE_AM33, "Matsushita AM33" },
@@ -99,6 +118,7 @@ struct PEFile
 	}
 
 	std::string GetCharacteristicsAsString() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		static std::map<WORD, const char*> CharacteristicsMap = {
 			{ IMAGE_FILE_RELOCS_STRIPPED, "Image only, Windows CE, and Microsoft Windows NT and later. This indicates that the file does not contain base relocations and must therefore be loaded at its preferred base address. If the base address is not available, the loader reports an error. The default behavior of the linker is to strip base relocations from executable (EXE) files." },
 			{ IMAGE_FILE_EXECUTABLE_IMAGE, "Image only. This indicates that the image file is valid and can be run. If this flag is not set, it indicates a linker error." },
@@ -129,6 +149,7 @@ struct PEFile
 	}
 
 	std::string GetTimeDateStampAsString() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		std::time_t TimeStamp = (std::time_t)ImageFileHeader.TimeDateStamp;
 		std::stringstream stream;
 		stream << std::put_time(std::gmtime(&TimeStamp), "%Y-%m-%d %I:%M:%S %p");
@@ -136,6 +157,7 @@ struct PEFile
 	}
 
 	std::string GetImageFileHeaderAsString() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		const char* Format = "Machine: [%hu, %s]\n"
 			"NumberOfSections: [%hu]\n"
 			"TimeDateStamp: [%lu, %s]\n"
@@ -155,38 +177,8 @@ struct PEFile
 		return std::string(Buffer);
 	}
 
-	std::string GetSubsystemAsString() {
-		static std::map<WORD, const char*> SubsystemMap = {
-			{ IMAGE_SUBSYSTEM_UNKNOWN, "An unknown subsystem" },
-			{ IMAGE_SUBSYSTEM_NATIVE, "Device drivers and native Windows processes" },
-			{ IMAGE_SUBSYSTEM_WINDOWS_GUI, "The Windows graphical user interface (GUI) subsystem" },
-			{ IMAGE_SUBSYSTEM_WINDOWS_CUI, "The Windows character subsystem" },
-			{ IMAGE_SUBSYSTEM_OS2_CUI, "The OS/2 character subsystem" },
-			{ IMAGE_SUBSYSTEM_POSIX_CUI, "The Posix character subsystem" },
-			{ IMAGE_SUBSYSTEM_NATIVE_WINDOWS, "Native Win9x driver" },
-			{ IMAGE_SUBSYSTEM_WINDOWS_CE_GUI, "Windows CE" },
-			{ IMAGE_SUBSYSTEM_EFI_APPLICATION, "An Extensible Firmware Interface (EFI) application" },
-			//{ IMAGE_SUBSYSTEM_EFI_BOOT_ SERVICE_DRIVER, "An EFI driver with boot services" },
-			//{ IMAGE_SUBSYSTEM_EFI_RUNTIME_ DRIVER, "An EFI driver with run-time services" },
-			{ IMAGE_SUBSYSTEM_EFI_ROM, "An EFI ROM image" },
-			{ IMAGE_SUBSYSTEM_XBOX, "XBOX" },
-			{ IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION, "Windows boot application." },
-		};
-		WORD Subsystem = 0;
-		if (IsPE32()) {
-			Subsystem = ImageOptionalHeader.ImageOptionalHeader32.Subsystem;
-		}
-		else if(IsPE32Plus()){
-			Subsystem = ImageOptionalHeader.ImageOptionalHeader64.Subsystem;
-		}
-		auto Iter = SubsystemMap.find(Subsystem);
-		if (Iter == SubsystemMap.end()) {
-			return "Unknown subsystem type.";
-		}
-		return (*Iter).second;
-	}
-
 	std::string GetDllCharacteristicsAsString() {
+		auto ImageFileHeader = *GetImageFileHeader();
 		static std::map<WORD, const char*> DllCharacteristicsMap = {
 			{ 0x0001, "Reserved, must be zero." },
 			{ 0x0002, "Reserved, must be zero." },
@@ -215,8 +207,39 @@ struct PEFile
 		return Stream.str();
 	}
 
+	std::string GetSubsystemAsString(bool IsPE32Plus) {
+		static std::map<WORD, const char*> SubsystemMap = {
+			{ IMAGE_SUBSYSTEM_UNKNOWN, "An unknown subsystem" },
+			{ IMAGE_SUBSYSTEM_NATIVE, "Device drivers and native Windows processes" },
+			{ IMAGE_SUBSYSTEM_WINDOWS_GUI, "The Windows graphical user interface (GUI) subsystem" },
+			{ IMAGE_SUBSYSTEM_WINDOWS_CUI, "The Windows character subsystem" },
+			{ IMAGE_SUBSYSTEM_OS2_CUI, "The OS/2 character subsystem" },
+			{ IMAGE_SUBSYSTEM_POSIX_CUI, "The Posix character subsystem" },
+			{ IMAGE_SUBSYSTEM_NATIVE_WINDOWS, "Native Win9x driver" },
+			{ IMAGE_SUBSYSTEM_WINDOWS_CE_GUI, "Windows CE" },
+			{ IMAGE_SUBSYSTEM_EFI_APPLICATION, "An Extensible Firmware Interface (EFI) application" },
+			//{ IMAGE_SUBSYSTEM_EFI_BOOT_ SERVICE_DRIVER, "An EFI driver with boot services" },
+			//{ IMAGE_SUBSYSTEM_EFI_RUNTIME_ DRIVER, "An EFI driver with run-time services" },
+			{ IMAGE_SUBSYSTEM_EFI_ROM, "An EFI ROM image" },
+			{ IMAGE_SUBSYSTEM_XBOX, "XBOX" },
+			{ IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION, "Windows boot application." },
+		};
+		WORD Subsystem = 0;
+		if (IsPE32()) {
+			GetImageOptionalHeader32()->Subsystem;
+		}
+		else {
+			GetImageOptionalHeader64()->Subsystem;
+		}
+		auto Iter = SubsystemMap.find(Subsystem);
+		if (Iter == SubsystemMap.end()) {
+			return "Unknown subsystem type.";
+		}
+		return (*Iter).second;
+	}
+
 	std::string GetImageOptionalHeader64AsString() {
-		const auto& ImageOptionalHeader64 = ImageOptionalHeader.ImageOptionalHeader64;
+		const auto& ImageOptionalHeader64 = *GetImageOptionalHeader64();
 		const char* Format = "PE Format: [%hu, %s]\n"
 			"MajorLinkerVersion: [%hhu]\n"
 			"MinorLinkerVersion: [%hhu]\n"
@@ -267,7 +290,7 @@ struct PEFile
 			ImageOptionalHeader64.Win32VersionValue,
 			ImageOptionalHeader64.SizeOfImage,
 			ImageOptionalHeader64.SizeOfHeaders,
-			ImageOptionalHeader64.Subsystem, GetSubsystemAsString().c_str(),
+			ImageOptionalHeader64.Subsystem, GetSubsystemAsString(false).c_str(),
 			GetDllCharacteristicsAsString().c_str(),
 			ImageOptionalHeader64.SizeOfStackReserve,
 			ImageOptionalHeader64.SizeOfStackCommit,
@@ -279,39 +302,39 @@ struct PEFile
 	}
 
 	std::string GetImageOptionalHeader32AsString() {
-		const auto& ImageOptionalHeader32 = ImageOptionalHeader.ImageOptionalHeader32;
-		const char* Format =	"PE Format: [%hu, %s]\n"
-								"MajorLinkerVersion: [%hhu]\n"
-								"MinorLinkerVersion: [%hhu]\n"
-								"SizeOfCode: [%lu]\n"
-								"SizeOfInitializedData: [%lu]\n"
-								"SizeOfUninitializedData: [%lu]\n"
-								"AddressOfEntryPoint: [0x%lx]\n"
-								"BaseOfCode: [0x%lx]\n"
-								"BaseOfData: [0x%lx]\n"
-								"ImageBase: [0x%lx]\n"
-								"SectionAlignment: [%lu]\n"
-								"FileAlignment: [%lu]\n"
-								"MajorOperatingSystemVersion: [%hu]\n"
-								"MinorOperatingSystemVersion: [%hu]\n"
-								"MajorImageVersion: [%hu]\n"
-								"MinorImageVersion: [%hu]\n"
-								"MajorSubsystemVersion: [%hu]\n"
-								"MinorSubsystemVersion: [%hu]\n"
-								"Win32VersionValue: [%lu]\n"
-								"SizeOfImage: [%lu]\n"
-								"SizeOfHeaders: [%lu]\n"
-								"Subsystem: [%hu, %s]\n"
-								"DllCharateristics: [%s]\n"
-								"SizeOfStackReserve: [%lu]\n"
-								"SizeOfStackCommit: [%lu]\n"
-								"SizeOfHeapReserve: [%lu]\n"
-								"SizeOfHeapCommit: [%lu]\n"
-								"NumberOfRvaAndSizes: [%lu]\n";
+		const auto& ImageOptionalHeader32 = *GetImageOptionalHeader32();;
+		const char* Format = "PE Format: [%hu, %s]\n"
+			"MajorLinkerVersion: [%hhu]\n"
+			"MinorLinkerVersion: [%hhu]\n"
+			"SizeOfCode: [%lu]\n"
+			"SizeOfInitializedData: [%lu]\n"
+			"SizeOfUninitializedData: [%lu]\n"
+			"AddressOfEntryPoint: [0x%lx]\n"
+			"BaseOfCode: [0x%lx]\n"
+			"BaseOfData: [0x%lx]\n"
+			"ImageBase: [0x%lx]\n"
+			"SectionAlignment: [%lu]\n"
+			"FileAlignment: [%lu]\n"
+			"MajorOperatingSystemVersion: [%hu]\n"
+			"MinorOperatingSystemVersion: [%hu]\n"
+			"MajorImageVersion: [%hu]\n"
+			"MinorImageVersion: [%hu]\n"
+			"MajorSubsystemVersion: [%hu]\n"
+			"MinorSubsystemVersion: [%hu]\n"
+			"Win32VersionValue: [%lu]\n"
+			"SizeOfImage: [%lu]\n"
+			"SizeOfHeaders: [%lu]\n"
+			"Subsystem: [%hu, %s]\n"
+			"DllCharateristics: [%s]\n"
+			"SizeOfStackReserve: [%lu]\n"
+			"SizeOfStackCommit: [%lu]\n"
+			"SizeOfHeapReserve: [%lu]\n"
+			"SizeOfHeapCommit: [%lu]\n"
+			"NumberOfRvaAndSizes: [%lu]\n";
 		char Buffer[8192] = {};
 		sprintf(Buffer, Format,
 			ImageOptionalHeader32.Magic, ImageOptionalHeader32.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC ? "PE32" :
-			(ImageOptionalHeader32.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC ? "PE32+": "Unkown"),
+			(ImageOptionalHeader32.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC ? "PE32+" : "Unkown"),
 			ImageOptionalHeader32.MajorLinkerVersion,
 			ImageOptionalHeader32.MinorLinkerVersion,
 			ImageOptionalHeader32.SizeOfCode,
@@ -332,7 +355,7 @@ struct PEFile
 			ImageOptionalHeader32.Win32VersionValue,
 			ImageOptionalHeader32.SizeOfImage,
 			ImageOptionalHeader32.SizeOfHeaders,
-			ImageOptionalHeader32.Subsystem, GetSubsystemAsString().c_str(),
+			ImageOptionalHeader32.Subsystem, GetSubsystemAsString(true).c_str(),
 			GetDllCharacteristicsAsString().c_str(),
 			ImageOptionalHeader32.SizeOfStackReserve,
 			ImageOptionalHeader32.SizeOfStackCommit,
@@ -343,5 +366,4 @@ struct PEFile
 		return std::string(Buffer);
 	}
 };
-
 

@@ -27,6 +27,9 @@
     <ClCompile Include="PEFile.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="PEFileDirect.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PEParser.h">
@@ -36,6 +39,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="PEFile.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="PEFileDirect.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

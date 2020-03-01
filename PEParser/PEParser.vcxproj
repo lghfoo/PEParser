@@ -141,11 +141,13 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PEFile.cpp" />
+    <ClCompile Include="PEFileDirect.cpp" />
     <ClCompile Include="PEParser.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logger.h" />
     <ClInclude Include="PEFile.h" />
+    <ClInclude Include="PEFileDirect.h" />
     <ClInclude Include="PEParser.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
