@@ -6,8 +6,7 @@
 #include<map>
 #include<ctime>
 #include<iomanip>
-#define NTSIGNATURE(a) ((LPVOID)((BYTE *)a +    \
-                        ((PIMAGE_DOS_HEADER)a)->e_lfanew))
+// DataDirectory
 struct PEFileDirect
 {
 	void* FileContent;

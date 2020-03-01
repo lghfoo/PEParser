@@ -28,6 +28,54 @@ struct PEFile
 	bool IsPE32Plus() {
 		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 	}
+	
+	std::string GetOptionalDataDirectoryAsString() {
+		static std::map<int, const char*> DataDirectoryMap = {
+			{ 0, "Export Table:    The export table address and size. For more information see .edata Section (Image Only)." },
+			{ 1, "Import Table:    The import table address and size. For more information, see The .idata Section." },
+			{ 2, "Resource Table:    The resource table address and size. For more information, see The .rsrc Section." },
+			{ 3, "Exception Table:    The exception table address and size. For more information, see The .pdata Section." },
+			{ 4, "Certificate Table:    The attribute certificate table address and size. For more information, see The Attribute Certificate Table (Image Only)." },
+			{ 5, "Base Relocation Table:    The base relocation table address and size. For more information, see The .reloc Section (Image Only)." },
+			{ 6, "Debug:    The debug data starting address and size. For more information, see The .debug Section." },
+			{ 7, "Architecture:    Reserved, must be 0" },
+			{ 8, "Global Ptr:    The RVA of the value to be stored in the global pointer register. The size member of this structure must be set to zero." },
+			{ 9, "TLS Table:    The thread local storage (TLS) table address and size. For more information, The .tls Section." },
+			{ 10, "Load Config Table:    The load configuration table address and size. For more information, The Load Configuration Structure (Image Only)." },
+			{ 11, "Bound Import:    The bound import table address and size." },
+			{ 12, "IAT:    The import address table address and size. For more information, see Import Address Table." },
+			{ 13, "Delay Import Descriptor:    The delay import descriptor address and size. For more information, see Delay-Load Import Tables (Image Only)." },
+			{ 14, "CLR Runtime Header:    The CLR runtime header address and size. For more information, see The .cormeta Section (Object Only)." },
+			{ 15, "Reserved, must be zero:    No description." },
+		};
+		IMAGE_DATA_DIRECTORY(*DataDirectory)[IMAGE_NUMBEROF_DIRECTORY_ENTRIES] = nullptr;
+		DWORD NumberOfRvaAndSizes = 0;
+		if (IsPE32()) {
+			DataDirectory = &ImageOptionalHeader.ImageOptionalHeader32.DataDirectory;
+			NumberOfRvaAndSizes = ImageOptionalHeader.ImageOptionalHeader32.NumberOfRvaAndSizes;
+		}
+		else if (IsPE32Plus()) {
+			DataDirectory = &ImageOptionalHeader.ImageOptionalHeader64.DataDirectory;
+			NumberOfRvaAndSizes = ImageOptionalHeader.ImageOptionalHeader64.NumberOfRvaAndSizes;
+		}
+		std::stringstream Stream;
+		Stream << "\n";
+		const char* Format = "\t<0x%08lX, %12lu, %s>\n";
+		char Buffer[1024];
+		if (DataDirectory) {
+			for (int i = 0; i < NumberOfRvaAndSizes; i++) {
+				IMAGE_DATA_DIRECTORY& Directory = (*DataDirectory)[i];
+				memset(Buffer, 0, sizeof(Buffer));
+				sprintf(Buffer, Format, Directory.VirtualAddress, Directory.Size, DataDirectoryMap[i]);
+				Stream << Buffer;
+			}
+		}
+		else {
+			Stream << "Unkown PE format";
+		}
+		return Stream.str();
+	}
+
 	std::string GetImageDosHeaderAsString() {
 		const char* Format = "Magic Number: [0x%hx, %c%c]\n"
 			"Bytes on last page of file: [%hu] Bytes\n"
@@ -243,7 +291,8 @@ struct PEFile
 			"SizeOfStackCommit: [%llu]\n"
 			"SizeOfHeapReserve: [%llu]\n"
 			"SizeOfHeapCommit: [%llu]\n"
-			"NumberOfRvaAndSizes: [%lu]\n";
+			"NumberOfRvaAndSizes: [%lu]\n"
+			"DataDirectory: [%s]\n";
 		char Buffer[8192] = {};
 		sprintf(Buffer, Format,
 			ImageOptionalHeader64.Magic, ImageOptionalHeader64.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC ? "PE32" :
@@ -273,7 +322,8 @@ struct PEFile
 			ImageOptionalHeader64.SizeOfStackCommit,
 			ImageOptionalHeader64.SizeOfHeapReserve,
 			ImageOptionalHeader64.SizeOfHeapCommit,
-			ImageOptionalHeader64.NumberOfRvaAndSizes
+			ImageOptionalHeader64.NumberOfRvaAndSizes,
+			GetOptionalDataDirectoryAsString().c_str()
 		);
 		return std::string(Buffer);
 	}
@@ -307,7 +357,8 @@ struct PEFile
 								"SizeOfStackCommit: [%lu]\n"
 								"SizeOfHeapReserve: [%lu]\n"
 								"SizeOfHeapCommit: [%lu]\n"
-								"NumberOfRvaAndSizes: [%lu]\n";
+								"NumberOfRvaAndSizes: [%lu]\n"
+								"DataDirectory: [%s]\n";
 		char Buffer[8192] = {};
 		sprintf(Buffer, Format,
 			ImageOptionalHeader32.Magic, ImageOptionalHeader32.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC ? "PE32" :
@@ -338,7 +389,8 @@ struct PEFile
 			ImageOptionalHeader32.SizeOfStackCommit,
 			ImageOptionalHeader32.SizeOfHeapReserve,
 			ImageOptionalHeader32.SizeOfHeapCommit,
-			ImageOptionalHeader32.NumberOfRvaAndSizes
+			ImageOptionalHeader32.NumberOfRvaAndSizes,
+			GetOptionalDataDirectoryAsString().c_str()
 		);
 		return std::string(Buffer);
 	}
