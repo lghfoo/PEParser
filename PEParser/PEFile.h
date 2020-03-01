@@ -16,15 +16,19 @@ struct PEFile
 		IMAGE_OPTIONAL_HEADER32 ImageOptionalHeader32;
 		IMAGE_OPTIONAL_HEADER64 ImageOptionalHeader64;
 	} ImageOptionalHeader;
+	
 	bool HasImageOptionalHeader() {
 		return ImageFileHeader.SizeOfOptionalHeader > 0;
 	}
+	
 	WORD GetSizeOfOptionalHeader() {
 		return ImageFileHeader.SizeOfOptionalHeader;
 	}
+	
 	bool IsPE32() {
 		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
 	}
+	
 	bool IsPE32Plus() {
 		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 	}
@@ -104,12 +108,14 @@ struct PEFile
 		);
 		return std::string(Buffer);
 	}
+	
 	std::string GetSignatureAsString() {
 		const char* Format = "Signature: [0x%lx, %c%c]\n";
 		char Buffer[32];
 		sprintf(Buffer, Format, Signature, (char)Signature, (char)(Signature>>8));
 		return std::string(Buffer);
 	}
+	
 	const char* GetMachineTypeAsString() {
 		static std::map<WORD, const char*> TypeMap = {
 			{ IMAGE_FILE_MACHINE_UNKNOWN, "The contents of this field are assumed to be applicable to any machine type" },
@@ -179,7 +185,7 @@ struct PEFile
 	std::string GetTimeDateStampAsString() {
 		std::time_t TimeStamp = (std::time_t)ImageFileHeader.TimeDateStamp;
 		std::stringstream stream;
-		stream << std::put_time(std::gmtime(&TimeStamp), "%Y-%m-%d %I:%M:%S %p");
+		stream << std::put_time(std::gmtime(&TimeStamp), "%Y-%m-%d %H:%M:%S");
 		return stream.str();
 	}
 
