@@ -98,6 +98,22 @@ private:
 				}
 			}
 		}
+	
+		// Section Table (Section Headers)
+		{
+			auto NumOfSections = Result.GetNumberOfSections();
+			auto& SectionTable = Result.SectionTable;
+			SectionTable = new IMAGE_SECTION_HEADER[NumOfSections];
+			EleRead = fread(SectionTable, sizeof(IMAGE_SECTION_HEADER), NumOfSections, File);
+			if (EleRead == NumOfSections) {
+				Logger::Printlnf("================================ Parse SectionTable ================================");
+				Logger::Printlnf(Result.GetSectionTableAsString().c_str());
+			}
+			else {
+				Logger::Printlnf("Failed to parse section table, [%d : %d]", EleRead, NumOfSections);
+				return;
+			}
+		}
 	}
 
 	void DirectParseImpl(FILE* File) {

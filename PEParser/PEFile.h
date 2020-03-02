@@ -6,6 +6,7 @@
 #include<map>
 #include<ctime>
 #include<iomanip>
+#include<cassert>
 struct PEFile
 {
 	IMAGE_DOS_HEADER ImageDosHeader;
@@ -16,7 +17,12 @@ struct PEFile
 		IMAGE_OPTIONAL_HEADER32 ImageOptionalHeader32;
 		IMAGE_OPTIONAL_HEADER64 ImageOptionalHeader64;
 	} ImageOptionalHeader;
-	
+	IMAGE_SECTION_HEADER* SectionTable = nullptr;
+	~PEFile() {
+		if (SectionTable) {
+			delete[]SectionTable;
+		}
+	}
 	bool HasImageOptionalHeader() {
 		return ImageFileHeader.SizeOfOptionalHeader > 0;
 	}
@@ -33,6 +39,10 @@ struct PEFile
 		return OptionalHeaderMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 	}
 	
+	WORD GetNumberOfSections() {
+		return this->ImageFileHeader.NumberOfSections;
+	}
+
 	std::string GetOptionalDataDirectoryAsString() {
 		static std::map<int, const char*> DataDirectoryMap = {
 			{ 0, "Export Table:    The export table address and size. For more information see .edata Section (Image Only)." },
@@ -399,6 +409,95 @@ struct PEFile
 			GetOptionalDataDirectoryAsString().c_str()
 		);
 		return std::string(Buffer);
+	}
+
+	std::string GetSectionCharacteristicsAsString(const IMAGE_SECTION_HEADER& Header) {
+		static std::map<DWORD, const char*> SectionCharacteristicsMap = {
+			{ 0x00000000, "Reserved for future use." },
+			{ 0x00000001, "Reserved for future use." },
+			{ 0x00000002, "Reserved for future use." },
+			{ 0x00000004, "Reserved for future use." },
+			{ IMAGE_SCN_TYPE_NO_PAD, "The section should not be padded to the next boundary. This flag is obsolete and is replaced by IMAGE_SCN_ALIGN_1BYTES. This is valid only for object files." },
+			{ 0x00000010, "Reserved for future use." },
+			{ IMAGE_SCN_CNT_CODE, "The section contains executable code." },
+			{ IMAGE_SCN_CNT_INITIALIZED_DATA, "The section contains initialized data." },
+			{ IMAGE_SCN_CNT_UNINITIALIZED_DATA, "The section contains uninitialized data." },
+			{ IMAGE_SCN_LNK_OTHER, "Reserved for future use." },
+			{ IMAGE_SCN_LNK_INFO, "The section contains comments or other information. The .drectve section has this type. This is valid for object files only." },
+			{ 0x00000400, "Reserved for future use." },
+			{ IMAGE_SCN_LNK_REMOVE, "The section will not become part of the image. This is valid only for object files." },
+			{ IMAGE_SCN_LNK_COMDAT, "The section contains COMDAT data. For more information, see COMDAT Sections (Object Only). This is valid only for object files." },
+			{ IMAGE_SCN_GPREL, "The section contains data referenced through the global pointer (GP)." },
+			{ IMAGE_SCN_MEM_PURGEABLE, "Reserved for future use." },
+			{ IMAGE_SCN_MEM_16BIT, "Reserved for future use." },
+			{ IMAGE_SCN_MEM_LOCKED, "Reserved for future use." },
+			{ IMAGE_SCN_MEM_PRELOAD, "Reserved for future use." },
+			{ IMAGE_SCN_ALIGN_1BYTES, "Align data on a 1-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_2BYTES, "Align data on a 2-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_4BYTES, "Align data on a 4-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_8BYTES, "Align data on an 8-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_16BYTES, "Align data on a 16-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_32BYTES, "Align data on a 32-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_64BYTES, "Align data on a 64-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_128BYTES, "Align data on a 128-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_256BYTES, "Align data on a 256-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_512BYTES, "Align data on a 512-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_1024BYTES, "Align data on a 1024-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_2048BYTES, "Align data on a 2048-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_4096BYTES, "Align data on a 4096-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_ALIGN_8192BYTES, "Align data on an 8192-byte boundary. Valid only for object files." },
+			{ IMAGE_SCN_LNK_NRELOC_OVFL, "The section contains extended relocations." },
+			{ IMAGE_SCN_MEM_DISCARDABLE, "The section can be discarded as needed." },
+			{ IMAGE_SCN_MEM_NOT_CACHED, "The section cannot be cached." },
+			{ IMAGE_SCN_MEM_NOT_PAGED, "The section is not pageable." },
+			{ IMAGE_SCN_MEM_SHARED, "The section can be shared in memory." },
+			{ IMAGE_SCN_MEM_EXECUTE, "The section can be executed as code." },
+			{ IMAGE_SCN_MEM_READ, "The section can be read." },
+			{ IMAGE_SCN_MEM_WRITE, "The section can be written to." },
+		};
+		std::stringstream Stream;
+		Stream << "\n";
+		for (const auto& FlagPair : SectionCharacteristicsMap) {
+			if (Header.Characteristics & FlagPair.first) {
+				Stream << "\t" << FlagPair.second << "\n";
+			}
+		}
+		return Stream.str();
+	}
+
+	std::string GetSectionHeaderAsString(int index) {
+		assert(0 <= index && index < GetNumberOfSections());
+		IMAGE_SECTION_HEADER& Header = SectionTable[index];
+		const char* Format =	"######## Section: [%s] ########\n"
+								"VirtualAddress: [%lX]\n"
+								"SizeOfRawData: [%lu]\n"
+								"PointerToRawData: [%lu]\n"
+								"PointerToRelocations: [%lu]\n"
+								"PointerToLinenumbers: [%lu]\n"
+								"NumberOfRelocations: [%hu]\n"
+								"NumberOfLinenumbers: [%hu]\n"
+								"Characteristics: [%s]\n";
+		char Buffer[1024];
+		sprintf(Buffer, Format,
+			Header.Name,
+			Header.VirtualAddress,
+			Header.SizeOfRawData,
+			Header.PointerToRawData,
+			Header.PointerToRelocations,
+			Header.PointerToLinenumbers,
+			Header.NumberOfRelocations,
+			Header.NumberOfLinenumbers,
+			GetSectionCharacteristicsAsString(Header).c_str());
+		return std::string(Buffer);
+	}
+
+	std::string GetSectionTableAsString() {
+		std::stringstream Stream;
+		Stream << "\n";
+		for (int i = 0; i < GetNumberOfSections(); i++) {
+			Stream << GetSectionHeaderAsString(i)<<"\n";
+		}
+		return Stream.str();
 	}
 };
 
